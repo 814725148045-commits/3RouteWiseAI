@@ -1,0 +1,7 @@
+{
+  "name": "RouteWise AI — Smart Delivery Planning System",
+  "description": "Smart delivery planning, fleet tracking, and route scheduling dashboard for small delivery businesses.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
