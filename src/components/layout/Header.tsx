@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 
 import { NavigationPage } from '../../types';
+import { UserProfile } from '../../types/user';
+import { UserSwitcher } from '../navigation/UserSwitcher';
 
 interface HeaderProps {
   currentPage?: NavigationPage;
@@ -23,6 +25,9 @@ interface HeaderProps {
   onOpenAddOrder: () => void;
   onResetData: () => void;
   onExportData: () => void;
+  activeProfile?: UserProfile;
+  onSelectUser?: (userId: string) => void;
+  onResetActiveUserData?: () => void;
 }
 
 interface NotificationItem {
@@ -69,6 +74,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAddOrder,
   onResetData,
   onExportData,
+  activeProfile,
+  onSelectUser,
+  onResetActiveUserData,
 }) => {
   const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -302,15 +310,25 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* User profile area */}
-          <div className="flex items-center gap-2.5 pl-2 border-l border-slate-800">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-teal-600 to-cyan-500 flex items-center justify-center text-slate-950 font-bold text-xs ring-1 ring-teal-400/30 shadow-xs">
-              AC
-            </div>
-            <div className="hidden xl:flex flex-col text-left">
-              <span className="text-xs font-semibold text-slate-200">Alex Chen</span>
-              <span className="text-[10px] text-slate-400">Operations Lead</span>
-            </div>
+          {/* Multi-User Profile Switcher (Demo Mode) */}
+          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+            {activeProfile && onSelectUser ? (
+              <UserSwitcher
+                activeProfile={activeProfile}
+                onSelectUser={onSelectUser}
+                onResetActiveUserData={onResetActiveUserData || (() => {})}
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center text-slate-950 font-bold text-xs ring-1 ring-teal-400/30">
+                  RW
+                </div>
+                <div className="hidden xl:flex flex-col text-left">
+                  <span className="text-xs font-semibold text-slate-200">Dispatcher</span>
+                  <span className="text-[10px] text-slate-400">Demo User</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

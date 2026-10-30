@@ -45,7 +45,81 @@ async function callGeminiWithRetry(ai: GoogleGenAI, params: any, maxRetries = 3)
 }
 
 // --------------------------------------------------------------------------
-// 1. GEMINI STATUS ENDPOINT
+// 1. SCOPED MULTI-USER WORKSPACE STORAGE (DEMO MODE PERSISTENCE)
+// --------------------------------------------------------------------------
+interface UserWorkspaceStore {
+  orders: any[];
+  vehicles: any[];
+  updatedAt: string;
+}
+
+const VALID_DEMO_USERS = new Set(['user-sf', 'user-sea', 'user-atx']);
+const userWorkspaces = new Map<string, UserWorkspaceStore>();
+
+// Helper to validate and extract active demo user scope
+function extractScopedUser(req: Request): string | null {
+  const paramUser = req.params.userId;
+  const headerUser = req.headers['x-demo-user-id'] as string;
+  const targetUser = paramUser || headerUser;
+  if (!targetUser || !VALID_DEMO_USERS.has(targetUser)) {
+    return null;
+  }
+  return targetUser;
+}
+
+app.get('/api/workspace/:userId', (req: Request, res: Response): void => {
+  const scopedUser = extractScopedUser(req);
+  if (!scopedUser) {
+    res.status(400).json({ success: false, error: 'Invalid or unauthorized demo user ID scope.' });
+    return;
+  }
+  const workspace = userWorkspaces.get(scopedUser) || { orders: [], vehicles: [], updatedAt: new Date().toISOString() };
+  res.json({
+    success: true,
+    userId: scopedUser,
+    mode: 'demo_workspace_scoped',
+    data: workspace,
+  });
+});
+
+app.post('/api/workspace/:userId/orders', (req: Request, res: Response): void => {
+  const scopedUser = extractScopedUser(req);
+  if (!scopedUser) {
+    res.status(400).json({ success: false, error: 'Invalid or unauthorized demo user ID scope.' });
+    return;
+  }
+  const { orders } = req.body;
+  if (!Array.isArray(orders)) {
+    res.status(400).json({ success: false, error: 'Orders must be an array.' });
+    return;
+  }
+  const current = userWorkspaces.get(scopedUser) || { orders: [], vehicles: [], updatedAt: new Date().toISOString() };
+  current.orders = orders;
+  current.updatedAt = new Date().toISOString();
+  userWorkspaces.set(scopedUser, current);
+  res.json({ success: true, count: orders.length, updatedAt: current.updatedAt });
+});
+
+app.post('/api/workspace/:userId/vehicles', (req: Request, res: Response): void => {
+  const scopedUser = extractScopedUser(req);
+  if (!scopedUser) {
+    res.status(400).json({ success: false, error: 'Invalid or unauthorized demo user ID scope.' });
+    return;
+  }
+  const { vehicles } = req.body;
+  if (!Array.isArray(vehicles)) {
+    res.status(400).json({ success: false, error: 'Vehicles must be an array.' });
+    return;
+  }
+  const current = userWorkspaces.get(scopedUser) || { orders: [], vehicles: [], updatedAt: new Date().toISOString() };
+  current.vehicles = vehicles;
+  current.updatedAt = new Date().toISOString();
+  userWorkspaces.set(scopedUser, current);
+  res.json({ success: true, count: vehicles.length, updatedAt: current.updatedAt });
+});
+
+// --------------------------------------------------------------------------
+// 2. GEMINI STATUS ENDPOINT
 // --------------------------------------------------------------------------
 app.get('/api/gemini/status', (_req: Request, res: Response) => {
   const hasKey = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim().length > 0);

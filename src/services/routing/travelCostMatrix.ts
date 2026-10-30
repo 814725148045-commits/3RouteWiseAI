@@ -51,11 +51,34 @@ export function getOrderCoordinates(order: DeliveryOrder): Point2D {
   return { x, y };
 }
 
+let globalActiveDepot: Point2D = { x: CENTRAL_DEPOT.x, y: CENTRAL_DEPOT.y };
+
+export function setActiveDepotCoordinates(coord: Point2D): void {
+  globalActiveDepot = coord;
+}
+
 /**
  * Returns depot coordinate
  */
-export function getDepotCoordinates(): Point2D {
-  return { x: CENTRAL_DEPOT.x, y: CENTRAL_DEPOT.y };
+export function getDepotCoordinates(customDepot?: Point2D): Point2D {
+  if (customDepot) return customDepot;
+  return globalActiveDepot;
+}
+
+/**
+ * Calculates real-world Haversine distance in kilometers between two GPS coordinates
+ * with 1.3x urban street circuity adjustment.
+ */
+export function calculateGeoDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth's mean radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const roadKm = R * c * 1.3;
+  return Number(roadKm.toFixed(2));
 }
 
 /**

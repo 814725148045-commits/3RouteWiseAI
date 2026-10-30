@@ -29,6 +29,8 @@ export interface DeliveryOrder {
   specialInstructions?: string;
   notes?: string; // Alias for backward compatibility
   coordinates?: { x: number; y: number };
+  lat?: number;
+  lng?: number;
 }
 
 export type VehicleStatus = 'Available' | 'On Route' | 'Maintenance' | 'Offline' | 'At Capacity';

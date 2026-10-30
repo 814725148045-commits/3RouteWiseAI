@@ -13,7 +13,10 @@ import {
   OptimizationResult,
   OptimizationSettings,
 } from '../../services/routing/types';
+import { UserProfile } from '../../types/user';
+import { DEMO_PROFILES } from '../../data/userProfiles';
 import { exportRoutePlanAsJson } from '../../services/routing/exportPlan';
+import { GoogleRouteMap } from './GoogleRouteMap';
 import { SchematicRouteVisualizer } from './SchematicRouteVisualizer';
 import { AssumptionsAndLimitationsCard } from './AssumptionsAndLimitationsCard';
 import { PlanComparisonPanel } from './PlanComparisonPanel';
@@ -44,6 +47,8 @@ interface RoutePlannerViewProps {
   vehicles: Vehicle[];
   onApplyPlan: (updatedOrders: DeliveryOrder[]) => void;
   onResetData: () => void;
+  userProfile?: UserProfile;
+  onSelectOrder?: (orderId: string) => void;
 }
 
 export const RoutePlannerView: React.FC<RoutePlannerViewProps> = ({
@@ -51,6 +56,8 @@ export const RoutePlannerView: React.FC<RoutePlannerViewProps> = ({
   vehicles,
   onApplyPlan,
   onResetData,
+  userProfile,
+  onSelectOrder,
 }) => {
   // Settings
   const [settings, setSettings] = useState<OptimizationSettings>(DEFAULT_OPTIMIZATION_SETTINGS);
@@ -59,7 +66,6 @@ export const RoutePlannerView: React.FC<RoutePlannerViewProps> = ({
   // Optimization Result
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationResult, setOptimizationResult] = useState<OptimizationResult | null>(() => {
-    // Initial run on mount with demo data
     try {
       return optimizeRoutes(orders, vehicles, DEFAULT_OPTIMIZATION_SETTINGS);
     } catch {
@@ -75,6 +81,17 @@ export const RoutePlannerView: React.FC<RoutePlannerViewProps> = ({
   const [lastOptimizedAt, setLastOptimizedAt] = useState<string | null>(
     optimizationResult ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null
   );
+
+  // Synchronize and re-optimize when orders or vehicles or settings change (e.g. user switch)
+  useEffect(() => {
+    try {
+      const fresh = optimizeRoutes(orders, vehicles, settings);
+      setOptimizationResult(fresh);
+      setLastOptimizedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    } catch (err) {
+      console.warn('[RoutePlanner] Auto-recalculation error:', err);
+    }
+  }, [orders, vehicles, settings]);
 
   // Trigger Optimization
   const handleRunOptimization = () => {
