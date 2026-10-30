@@ -56,7 +56,18 @@ export const OptimizationSettingsDrawer: React.FC<OptimizationSettingsDrawerProp
                 <Target className="w-3.5 h-3.5 text-teal-400" />
                 Optimization Objective
               </label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => onChangeSettings({ ...settings, objective: 'lexicographic' })}
+                  className={`px-3 py-2 rounded-lg text-xs font-medium border text-center transition-all cursor-pointer ${
+                    settings.objective === 'lexicographic'
+                      ? 'bg-teal-500/20 border-teal-500/50 text-teal-200 ring-1 ring-teal-500/40'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Lexicographic (Min. Fleet → Dist)
+                </button>
                 <button
                   type="button"
                   onClick={() => onChangeSettings({ ...settings, objective: 'distance' })}
@@ -81,9 +92,11 @@ export const OptimizationSettingsDrawer: React.FC<OptimizationSettingsDrawerProp
                 </button>
               </div>
               <p className="text-[11px] text-slate-400">
-                {settings.objective === 'distance'
-                  ? 'Minimizes road travel distance (km). Evaluates candidate legs in kilometers with geometric tie-breaking.'
-                  : 'Minimizes total transit duration plus service dwell time (minutes). Evaluates candidates in minutes with SLA deadline and fleet duration tie-breaking.'}
+                {settings.objective === 'lexicographic'
+                  ? 'DT-LSC-10 Priority: First strictly minimizes the number of vehicles used (K*), then minimizes total route distance among solutions using K* vehicles.'
+                  : settings.objective === 'distance'
+                  ? 'Minimizes total road distance (km) across all eligible fleet units.'
+                  : 'Minimizes total duration (travel time + dwell service time) in minutes.'}
               </p>
             </div>
 

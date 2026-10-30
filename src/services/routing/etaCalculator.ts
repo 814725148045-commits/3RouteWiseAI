@@ -60,38 +60,76 @@ export function formatMinutesToTime(minutesFromMidnight: number): string {
 export interface EtaEvaluation {
   estimatedArrival: string;
   estimatedArrivalMinutes: number;
+  timeWindowEarliestString: string;
+  timeWindowLatestString: string;
+  isWithinWindow: boolean;
+  isEarly: boolean;
   isDeadlineMissed: boolean;
-  deadlineDiscrepancyMinutes?: number;
+  deadlineDiscrepancyMinutes?: number; // Minutes late (> 0), or 0 if on-time
+  windowViolationMinutes?: number;
   deadlineString: string;
 }
 
 /**
- * Evaluates ETA against an order's delivery deadline.
+ * Evaluates calculated stop ETA against delivery time window bounds [Earliest, Latest].
+ * Supports string deadline, or order object with timeWindowEarliest and timeWindowLatest.
  */
 export function evaluateStopEta(
   arrivalMinutes: number,
-  deliveryDeadlineStr?: string
+  orderOrDeadline?: string | {
+    timeWindowEarliest?: string;
+    timeWindowLatest?: string;
+    deliveryDeadline?: string;
+  },
+  optionalEarliestStr?: string
 ): EtaEvaluation {
   const estimatedArrival = formatMinutesToTime(arrivalMinutes);
-  const deadlineMinutes = parseTimeToMinutes(deliveryDeadlineStr);
 
-  if (deadlineMinutes === undefined) {
-    return {
-      estimatedArrival,
-      estimatedArrivalMinutes: arrivalMinutes,
-      isDeadlineMissed: false,
-      deadlineString: deliveryDeadlineStr || 'Flexible',
-    };
+  let earliestStr: string | undefined;
+  let latestStr: string | undefined;
+
+  if (typeof orderOrDeadline === 'object' && orderOrDeadline !== null) {
+    earliestStr = orderOrDeadline.timeWindowEarliest;
+    latestStr = orderOrDeadline.timeWindowLatest || orderOrDeadline.deliveryDeadline;
+  } else if (typeof orderOrDeadline === 'string') {
+    latestStr = orderOrDeadline;
+    earliestStr = optionalEarliestStr;
   }
 
-  const discrepancy = arrivalMinutes - deadlineMinutes;
-  const isDeadlineMissed = discrepancy > 0;
+  const latestMinutes = parseTimeToMinutes(latestStr);
+  const earliestMinutes = parseTimeToMinutes(earliestStr);
+
+  const timeWindowEarliestString = earliestStr || (earliestMinutes !== undefined ? formatMinutesToTime(earliestMinutes) : '08:30 AM');
+  const timeWindowLatestString = latestStr || (latestMinutes !== undefined ? formatMinutesToTime(latestMinutes) : 'Flexible');
+  const deadlineString = timeWindowLatestString;
+
+  let isDeadlineMissed = false;
+  let isEarly = false;
+  let isWithinWindow = true;
+  let deadlineDiscrepancyMinutes = 0;
+  let windowViolationMinutes = 0;
+
+  if (latestMinutes !== undefined && arrivalMinutes > latestMinutes) {
+    isDeadlineMissed = true;
+    isWithinWindow = false;
+    deadlineDiscrepancyMinutes = arrivalMinutes - latestMinutes;
+    windowViolationMinutes = deadlineDiscrepancyMinutes;
+  } else if (earliestMinutes !== undefined && arrivalMinutes < earliestMinutes) {
+    isEarly = true;
+    isWithinWindow = false;
+    windowViolationMinutes = arrivalMinutes - earliestMinutes; // negative
+  }
 
   return {
     estimatedArrival,
     estimatedArrivalMinutes: arrivalMinutes,
+    timeWindowEarliestString,
+    timeWindowLatestString,
+    isWithinWindow,
+    isEarly,
     isDeadlineMissed,
-    deadlineDiscrepancyMinutes: discrepancy,
-    deadlineString: deliveryDeadlineStr || formatMinutesToTime(deadlineMinutes),
+    deadlineDiscrepancyMinutes,
+    windowViolationMinutes,
+    deadlineString,
   };
 }

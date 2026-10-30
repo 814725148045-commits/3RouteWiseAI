@@ -4,9 +4,6 @@ import {
   Package,
   Truck,
   Route,
-  Sparkles,
-  LifeBuoy,
-  Settings,
   ChevronLeft,
   ChevronRight,
   Boxes,
@@ -32,13 +29,10 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, isReadyInModule1: true },
-  { id: 'orders', label: 'Orders', icon: Package, isReadyInModule1: true },
-  { id: 'fleet', label: 'Fleet', icon: Truck, isReadyInModule1: true },
-  { id: 'planner', label: 'Route Planner', icon: Route, isReadyInModule1: true },
-  { id: 'insights', label: 'AI Insights', icon: Sparkles, isReadyInModule1: true },
-  { id: 'rescue', label: 'Route Rescue', icon: LifeBuoy, isReadyInModule1: true, moduleBadge: 'Active' },
-  { id: 'settings', label: 'Settings', icon: Settings, isReadyInModule1: false },
+  { id: 'planner', label: 'Route Optimization', icon: Route, isReadyInModule1: true, moduleBadge: 'Primary' },
+  { id: 'dashboard', label: 'Delivery Dashboard', icon: LayoutDashboard, isReadyInModule1: true },
+  { id: 'orders', label: 'Customer Deliveries', icon: Package, isReadyInModule1: true },
+  { id: 'fleet', label: 'Fleet Management', icon: Truck, isReadyInModule1: true },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -75,10 +69,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {!collapsed && (
               <div className="flex flex-col min-w-0">
                 <span className="text-base font-bold tracking-tight text-white truncate">
-                  RouteWise <span className="text-teal-400 font-extrabold">AI</span>
+                  RouteWise <span className="text-teal-400 font-extrabold">Fleet</span>
                 </span>
                 <span className="text-[11px] font-medium text-slate-400 truncate">
-                  Smart Delivery Ops
+                  DT-LSC-10 Routing
                 </span>
               </div>
             )}
@@ -98,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {!collapsed && (
             <div className="px-3 mb-2 text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
-              Operations Center
+              Fleet Operations
             </div>
           )}
 
@@ -130,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
 
                 {!collapsed && item.moduleBadge && (
-                  <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded text-slate-400 bg-slate-800/80 border border-slate-700/50">
+                  <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded text-teal-300 bg-teal-500/10 border border-teal-500/20">
                     {item.moduleBadge}
                   </span>
                 )}
@@ -139,22 +133,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </div>
 
-        {/* Modules 1–5 Active Banner */}
+        {/* Specification Banner */}
         <div className="p-3 border-t border-slate-800/80 shrink-0">
           {!collapsed ? (
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-xs">
               <div className="flex items-center justify-between text-slate-300 font-semibold mb-1">
                 <span className="flex items-center gap-1.5 text-teal-400">
-                  <Boxes className="w-3.5 h-3.5" /> Modules 1–6 Active
+                  <Boxes className="w-3.5 h-3.5" /> DT-LSC-10
                 </span>
-                <span className="font-mono text-[10px] text-slate-400">v1.6</span>
+                <span className="font-mono text-[10px] text-teal-300">Lexicographic</span>
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed">
-                Route Rescue, Gemini AI insights, optimization, fleet, and orders active.
+                Small delivery fleet optimization under customer time windows.
               </p>
             </div>
           ) : (
-            <div className="flex justify-center" title="Modules 1–6 Active">
+            <div className="flex justify-center" title="DT-LSC-10 Small Fleet Optimization">
               <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-teal-400">
                 <Boxes className="w-4 h-4" />
               </div>

@@ -44,6 +44,9 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
   const [priority, setPriority] = useState<OrderPriority>('normal');
   const [status, setStatus] = useState<OrderStatus>('pending');
   const [deadlineTime, setDeadlineTime] = useState('14:30');
+  const [timeWindowEarliest, setTimeWindowEarliest] = useState('08:30');
+  const [timeWindowLatest, setTimeWindowLatest] = useState('14:30');
+  const [serviceTimeMinutes, setServiceTimeMinutes] = useState('10');
   const [assignedVehicleId, setAssignedVehicleId] = useState<string>('');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -61,6 +64,9 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
       setPriority(initialOrder.priority || 'normal');
       setStatus(initialOrder.status || 'pending');
       setDeadlineTime(initialOrder.deliveryDeadline || initialOrder.estimatedArrival || '14:30');
+      setTimeWindowEarliest(initialOrder.timeWindowEarliest || '08:30');
+      setTimeWindowLatest(initialOrder.timeWindowLatest || initialOrder.deliveryDeadline || '14:30');
+      setServiceTimeMinutes(initialOrder.serviceTimeMinutes ? initialOrder.serviceTimeMinutes.toString() : '10');
       setAssignedVehicleId(initialOrder.assignedVehicleId || '');
       setSpecialInstructions(initialOrder.specialInstructions || initialOrder.notes || '');
       setErrors({});
@@ -76,6 +82,9 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
       setPriority('normal');
       setStatus('pending');
       setDeadlineTime('14:30');
+      setTimeWindowEarliest('08:30');
+      setTimeWindowLatest('14:30');
+      setServiceTimeMinutes('10');
       setAssignedVehicleId('');
       setSpecialInstructions('');
       setErrors({});
@@ -160,6 +169,8 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
     if (!validate()) return;
 
     const formattedDeadline = formatDisplayTime(deadlineTime);
+    const formattedEarliest = formatDisplayTime(timeWindowEarliest);
+    const formattedLatest = formatDisplayTime(timeWindowLatest);
 
     // Generate unique ID if new
     const id = isEditing && initialOrder ? initialOrder.id : `ORD-${8020 + existingOrdersCount + 1}`;
@@ -177,6 +188,9 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
       priority,
       status: isEditing && initialOrder ? status : assignedVehicleId ? 'assigned' : 'pending',
       deliveryDeadline: formattedDeadline,
+      timeWindowEarliest: formattedEarliest,
+      timeWindowLatest: formattedLatest,
+      serviceTimeMinutes: parseInt(serviceTimeMinutes, 10) || 10,
       estimatedArrival: formattedDeadline,
       assignedVehicleId: assignedVehicleId || undefined,
       specialInstructions: specialInstructions.trim() || undefined,
@@ -416,16 +430,19 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
                   </select>
                 </div>
 
-                {/* Delivery Deadline */}
+                {/* Delivery Deadline / Latest Time Window */}
                 <div>
                   <label className="block text-slate-300 font-medium mb-1 flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Delivery Deadline</span> <span className="text-rose-400">*</span>
+                    <span>Latest Allowed Arrival</span> <span className="text-rose-400">*</span>
                   </label>
                   <input
                     type="time"
                     value={deadlineTime.includes('M') ? '14:30' : deadlineTime}
-                    onChange={(e) => setDeadlineTime(e.target.value)}
+                    onChange={(e) => {
+                      setDeadlineTime(e.target.value);
+                      setTimeWindowLatest(e.target.value);
+                    }}
                     className={`w-full px-3 py-2 bg-slate-900 text-slate-100 rounded-lg border font-mono text-xs ${
                       errors.deadlineTime ? 'border-rose-500' : 'border-slate-700/80'
                     } focus:outline-hidden focus:border-teal-500 transition-colors`}
@@ -435,6 +452,39 @@ export const OrderFormModal: React.FC<OrderFormModalProps> = ({
                       <AlertCircle className="w-3 h-3" /> {errors.deadlineTime}
                     </p>
                   )}
+                </div>
+              </div>
+
+              {/* Time Window Earliest & Service Dwell Time */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3 rounded-lg bg-slate-900/40 border border-slate-800">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-teal-400" />
+                    <span>Earliest Allowed Arrival</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={timeWindowEarliest.includes('M') ? '08:30' : timeWindowEarliest}
+                    onChange={(e) => setTimeWindowEarliest(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 text-slate-100 rounded-lg border border-slate-700/80 font-mono text-xs focus:outline-hidden focus:border-teal-500 transition-colors"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Vehicle waits if arriving earlier</p>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Estimated Service Time (Minutes)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    value={serviceTimeMinutes}
+                    onChange={(e) => setServiceTimeMinutes(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 text-slate-100 rounded-lg border border-slate-700/80 font-mono text-xs focus:outline-hidden focus:border-teal-500 transition-colors"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Dwell time at customer stop</p>
                 </div>
               </div>
 

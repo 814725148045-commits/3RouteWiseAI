@@ -5,7 +5,7 @@
 
 import { DeliveryOrder, Vehicle } from '../../types';
 
-export type OptimizationObjective = 'distance' | 'time';
+export type OptimizationObjective = 'lexicographic' | 'distance' | 'time';
 
 export type FleetScopeOption = 'operational' | 'available-only';
 
@@ -23,13 +23,19 @@ export interface RouteStopPlan {
   order: DeliveryOrder;
   estimatedArrival: string; // Calculated ETA string (e.g. '09:18 AM')
   estimatedArrivalMinutes: number; // Minutes from day start
+  timeWindowEarliest: string; // Allowed arrival start
+  timeWindowLatest: string; // Allowed arrival end
+  isWithinWindow: boolean; // Arrival time satisfies [earliest, latest]
+  isEarly: boolean; // Arrived before earliest allowed window
+  isDeadlineMissed: boolean; // Late (arrived after latest allowed window)
+  windowViolationMinutes?: number; // Minutes late (positive) or early (negative)
+  deadlineDiscrepancyMinutes?: number; // Positive if late, 0 if on-time
+  deadlineString: string;
   travelDistanceKmFromPrev: number;
   travelTimeMinutesFromPrev: number;
+  serviceTimeMinutes: number;
   cumulativeDistanceKm: number;
   cumulativeTimeMinutes: number;
-  isDeadlineMissed: boolean;
-  deadlineDiscrepancyMinutes?: number; // Positive if late, negative if early
-  deadlineString: string;
 }
 
 export interface VehicleRoutePlan {
@@ -76,17 +82,27 @@ export interface PlanComparisonMetrics {
   baselineVehiclesUsed: number;
   baselineOrdersRouted: number;
   baselineUnassignedCount: number;
+  baselineTimeWindowMetCount: number;
+  baselineTimeWindowMissedCount: number;
 
   optimizedTotalDistanceKm: number;
   optimizedTotalDurationMinutes: number;
   optimizedVehiclesUsed: number;
   optimizedOrdersRouted: number;
   optimizedUnassignedCount: number;
+  optimizedTimeWindowMetCount: number;
+  optimizedTimeWindowMissedCount: number;
 
   distanceSavedKm: number;
   distanceImprovementPercent: number;
   timeSavedMinutes: number;
   timeImprovementPercent: number;
+
+  isDirectlyComparable: boolean;
+  comparabilityNote: string;
+  likeForLikeBaselineDistanceKm?: number;
+  likeForLikeDistanceSavedKm?: number;
+  likeForLikeImprovementPercent?: number;
 
   hasValidBaseline: boolean;
   baselineSummaryNote: string;
@@ -115,7 +131,7 @@ export interface OptimizationResult {
   unassignedOrders: UnassignedOrderReport[];
   validationReport: ValidationReport;
   comparison: PlanComparisonMetrics;
-  geminiInsight: GeminiInsightPayload;
+  geminiInsight?: GeminiInsightPayload;
   totalDistanceKm: number;
   totalDurationMinutes: number;
   totalAssignedOrders: number;
@@ -125,4 +141,6 @@ export interface OptimizationResult {
   isFeasible: boolean;
   algorithmName: string;
   modelLimitationsNote: string;
+  timeWindowsMetCount: number;
+  timeWindowsMissedCount: number;
 }

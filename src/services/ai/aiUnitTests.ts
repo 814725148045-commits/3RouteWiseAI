@@ -465,10 +465,12 @@ export function runAiModuleUnitTests(): AiTestSuiteExecution {
       ...optResult,
       id: `OPT-REGEN-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       optimizedAt: new Date(Date.now() + 3600000).toISOString(),
-      geminiInsight: {
-        ...optResult.geminiInsight,
-        generatedAt: new Date(Date.now() + 3600000).toISOString(),
-      },
+      geminiInsight: optResult.geminiInsight
+        ? {
+            ...optResult.geminiInsight,
+            generatedAt: new Date(Date.now() + 3600000).toISOString(),
+          }
+        : undefined,
     };
 
     const fpRegenerated = computeDataFingerprint(INITIAL_ORDERS, INITIAL_VEHICLES, regeneratedOptResult);

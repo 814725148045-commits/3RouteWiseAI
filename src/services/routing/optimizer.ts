@@ -34,12 +34,12 @@ import {
 } from './types';
 
 export const DEFAULT_OPTIMIZATION_SETTINGS: OptimizationSettings = {
-  objective: 'distance',
+  objective: 'lexicographic',
   averageSpeedKmH: 35,
   serviceTimeMinutes: 10,
   depotDepartureTime: '08:30 AM',
   maxIterations2Opt: 50,
-  fleetScope: 'operational',
+  fleetScope: 'available-only',
 };
 
 /**
@@ -110,7 +110,8 @@ export function computeRouteScore(
   const totalServiceMinutes = route.length * settings.serviceTimeMinutes;
   const durationMinutes = transitMinutes + totalServiceMinutes;
 
-  const score = settings.objective === 'distance' ? distanceKm : durationMinutes;
+  const score =
+    settings.objective === 'time' ? durationMinutes : distanceKm;
 
   return {
     distanceKm,
@@ -174,7 +175,7 @@ export function runTwoOptPass(
 
         const candidateEval = computeRouteScore(candidate, depotPoint, settings);
 
-        if (settings.objective === 'distance') {
+        if (settings.objective !== 'time') {
           // Strict distance improvement check with 0.01 km threshold to prevent floating jitter
           if (candidateEval.score < bestEvaluation.score - 0.01) {
             bestRoute = candidate;
@@ -249,7 +250,7 @@ export function sequenceByNearestNeighbor(
       const ordPoint = getOrderCoordinates(ord);
       const legEval = evaluateCandidateLegCost(currentPoint, ordPoint, settings, true);
 
-      if (settings.objective === 'distance') {
+      if (settings.objective !== 'time') {
         const dist = legEval.distanceKm;
         const isBetter =
           dist < bestScore - 0.001 ||
@@ -302,7 +303,7 @@ export function sequenceByNearestNeighbor(
 }
 
 /**
- * Builds RouteStopPlan sequence with distances, times, and ETAs
+ * Builds RouteStopPlan sequence with distances, times, time windows, and ETAs
  */
 function buildStopPlans(
   orderedOrders: DeliveryOrder[],
@@ -313,6 +314,7 @@ function buildStopPlans(
   totalDistanceKm: number;
   totalDurationMinutes: number;
   deadlineWarningsCount: number;
+  timeWindowsMetCount: number;
 } {
   const departureMinutes = parseTimeToMinutes(settings.depotDepartureTime) ?? 510; // Default 08:30 AM (510 min)
 
@@ -321,6 +323,7 @@ function buildStopPlans(
   let cumulativeDistanceKm = 0;
   let currentMinutes = departureMinutes;
   let deadlineWarningsCount = 0;
+  let timeWindowsMetCount = 0;
 
   orderedOrders.forEach((order, index) => {
     const orderPoint = getOrderCoordinates(order);
@@ -330,27 +333,40 @@ function buildStopPlans(
     cumulativeDistanceKm = Number((cumulativeDistanceKm + distFromPrev).toFixed(2));
     const arrivalMinutes = currentMinutes + travelTimeMin;
 
-    const etaEval = evaluateStopEta(arrivalMinutes, order.deliveryDeadline);
+    const etaEval = evaluateStopEta(arrivalMinutes, order);
     if (etaEval.isDeadlineMissed) {
       deadlineWarningsCount++;
+    } else {
+      timeWindowsMetCount++;
     }
+
+    const stopServiceTime = order.serviceTimeMinutes || settings.serviceTimeMinutes;
 
     stops.push({
       stopIndex: index + 1,
       order,
       estimatedArrival: etaEval.estimatedArrival,
       estimatedArrivalMinutes: arrivalMinutes,
-      travelDistanceKmFromPrev: distFromPrev,
-      travelTimeMinutesFromPrev: travelTimeMin,
-      cumulativeDistanceKm,
-      cumulativeTimeMinutes: arrivalMinutes - departureMinutes,
+      timeWindowEarliest: etaEval.timeWindowEarliestString,
+      timeWindowLatest: etaEval.timeWindowLatestString,
+      isWithinWindow: etaEval.isWithinWindow,
+      isEarly: etaEval.isEarly,
       isDeadlineMissed: etaEval.isDeadlineMissed,
       deadlineDiscrepancyMinutes: etaEval.deadlineDiscrepancyMinutes,
+      windowViolationMinutes: etaEval.windowViolationMinutes,
       deadlineString: etaEval.deadlineString,
+      travelDistanceKmFromPrev: distFromPrev,
+      travelTimeMinutesFromPrev: travelTimeMin,
+      serviceTimeMinutes: stopServiceTime,
+      cumulativeDistanceKm,
+      cumulativeTimeMinutes: arrivalMinutes - departureMinutes,
     });
 
-    // Advance time for next stop: arrival + service time at this stop
-    currentMinutes = arrivalMinutes + settings.serviceTimeMinutes;
+    // Advance time for next stop: arrival (wait until earliest window opens if early) + service dwell time
+    const earliestAllowed = parseTimeToMinutes(order.timeWindowEarliest);
+    const serviceStartMinutes =
+      earliestAllowed !== undefined ? Math.max(arrivalMinutes, earliestAllowed) : arrivalMinutes;
+    currentMinutes = serviceStartMinutes + stopServiceTime;
     prevPoint = orderPoint;
   });
 
@@ -367,6 +383,7 @@ function buildStopPlans(
     totalDistanceKm: cumulativeDistanceKm,
     totalDurationMinutes,
     deadlineWarningsCount,
+    timeWindowsMetCount,
   };
 }
 
@@ -487,6 +504,8 @@ export function optimizeRoutes(
       isFeasible: false,
       algorithmName: 'Deterministic Nearest-Neighbor + 2-Opt (Halted on Validation)',
       modelLimitationsNote: SYNTHETIC_MODEL_DISCLOSURE,
+      timeWindowsMetCount: 0,
+      timeWindowsMissedCount: 0,
     };
   }
 
@@ -526,8 +545,7 @@ export function optimizeRoutes(
       return a.id.localeCompare(b.id);
     });
 
-  // Step 3: Heuristic Vehicle Assignment
-  // Initialize vehicle buckets
+  // Step 3: Vehicle Assignment (Heuristic or Lexicographic)
   interface VehicleBucket {
     vehicle: Vehicle;
     assignedOrders: DeliveryOrder[];
@@ -536,7 +554,7 @@ export function optimizeRoutes(
     maxStops: number;
   }
 
-  const buckets: VehicleBucket[] = eligibleVehicles.map((v) => ({
+  let buckets: VehicleBucket[] = eligibleVehicles.map((v) => ({
     vehicle: v,
     assignedOrders: [],
     currentLoadKg: 0,
@@ -546,120 +564,294 @@ export function optimizeRoutes(
 
   const unassigned: UnassignedOrderReport[] = [];
 
-  for (const order of eligibleOrders) {
-    const orderWeight = order.weightKg || order.packageWeightKg || 0;
+  if (settings.objective === 'lexicographic') {
+    // -------------------------------------------------------------
+    // LEXICOGRAPHIC OPTIMIZATION:
+    // Priority 1: Minimize number of vehicles used (K)
+    // Priority 2: Minimize total distance among solutions with K vehicles
+    // -------------------------------------------------------------
+    const assignableOrders: DeliveryOrder[] = [];
+    const maxFleetCap = Math.max(...buckets.map((b) => b.maxCapacityKg), 0);
 
-    // Check if order exceeds every vehicle's total capacity
-    const canFitAnywhere = buckets.some((b) => b.maxCapacityKg >= orderWeight);
-    if (!canFitAnywhere) {
-      unassigned.push({
-        order,
-        reason: 'Order exceeds available vehicle capacity',
-        detail: `Package weight (${orderWeight} kg) exceeds maximum capacity of any available vehicle (Max: ${Math.max(
-          ...buckets.map((b) => b.maxCapacityKg)
-        )} kg).`,
-      });
-      continue;
+    for (const order of eligibleOrders) {
+      const orderWeight = order.weightKg || order.packageWeightKg || 0;
+      if (orderWeight > maxFleetCap) {
+        unassigned.push({
+          order,
+          reason: 'Order exceeds available vehicle capacity',
+          detail: `Package weight (${orderWeight} kg) exceeds maximum capacity of any available vehicle (Max: ${maxFleetCap} kg).`,
+        });
+      } else {
+        assignableOrders.push(order);
+      }
     }
 
-    // Find best compatible vehicle bucket
-    // Criterion: Can accommodate weight without exceeding capacity & max stops.
-    // Preference:
-    // - Distance objective: least additional road distance (km), with -15km affinity bonus for previously assigned vehicle.
-    // - Time objective: least additional travel time + configured service dwell time (minutes), with affinity bonus in minutes and fleet duration balancing.
-    let bestBucket: VehicleBucket | null = null;
-    let bestCost = Number.MAX_VALUE;
-    let bestSecondary = Number.MAX_VALUE;
+    // Helper: simulate greedy best-fit assignment to a fixed subset of vehicles
+    const simulateSubsetAssignment = (subset: Vehicle[]) => {
+      const subBuckets = subset.map((v) => ({
+        vehicle: v,
+        assignedOrders: [] as DeliveryOrder[],
+        currentLoadKg: 0,
+        maxCapacityKg: v.capacityKg || 500,
+        maxStops: v.maxStops || 15,
+      }));
+      const subUnassigned: DeliveryOrder[] = [];
 
-    for (const bucket of buckets) {
-      const willExceedWeight = bucket.currentLoadKg + orderWeight > bucket.maxCapacityKg;
-      const willExceedStops = bucket.assignedOrders.length + 1 > bucket.maxStops;
+      for (const order of assignableOrders) {
+        const orderWeight = order.weightKg || order.packageWeightKg || 0;
+        let chosenBucket: (typeof subBuckets)[0] | null = null;
+        let minDist = Number.MAX_VALUE;
 
-      if (willExceedWeight || willExceedStops) {
+        for (const bucket of subBuckets) {
+          if (
+            bucket.currentLoadKg + orderWeight > bucket.maxCapacityKg ||
+            bucket.assignedOrders.length + 1 > bucket.maxStops
+          ) {
+            continue;
+          }
+
+          const lastPt =
+            bucket.assignedOrders.length > 0
+              ? getOrderCoordinates(bucket.assignedOrders[bucket.assignedOrders.length - 1])
+              : depotPoint;
+          const ordPt = getOrderCoordinates(order);
+          const dist = calculateDistanceKm(lastPt, ordPt);
+
+          if (dist < minDist - 0.001) {
+            minDist = dist;
+            chosenBucket = bucket;
+          } else if (
+            Math.abs(dist - minDist) <= 0.001 &&
+            chosenBucket &&
+            bucket.vehicle.id.localeCompare(chosenBucket.vehicle.id) < 0
+          ) {
+            chosenBucket = bucket;
+          }
+        }
+
+        if (chosenBucket) {
+          chosenBucket.assignedOrders.push(order);
+          chosenBucket.currentLoadKg = Number((chosenBucket.currentLoadKg + orderWeight).toFixed(1));
+        } else {
+          subUnassigned.push(order);
+        }
+      }
+
+      // Compute total distance across subBuckets
+      let totalDist = 0;
+      for (const b of subBuckets) {
+        if (b.assignedOrders.length === 0) continue;
+        let prev = depotPoint;
+        for (const ord of b.assignedOrders) {
+          const pt = getOrderCoordinates(ord);
+          totalDist += calculateDistanceKm(prev, pt);
+          prev = pt;
+        }
+        totalDist += calculateDistanceKm(prev, depotPoint);
+      }
+
+      return {
+        subBuckets,
+        assignedCount: assignableOrders.length - subUnassigned.length,
+        unassignedOrders: subUnassigned,
+        totalDist: Number(totalDist.toFixed(2)),
+      };
+    };
+
+    // Combinations helper
+    const getSubsets = <T>(arr: T[], k: number): T[][] => {
+      const results: T[][] = [];
+      const backtrack = (start: number, curr: T[]) => {
+        if (curr.length === k) {
+          results.push(curr);
+          return;
+        }
+        for (let i = start; i < arr.length; i++) {
+          backtrack(i + 1, [...curr, arr[i]]);
+        }
+      };
+      backtrack(0, []);
+      return results;
+    };
+
+    // First find the maximum number of orders that can be assigned across the full fleet
+    const fullFleetEval = simulateSubsetAssignment(eligibleVehicles);
+    const maxAssignableCount = fullFleetEval.assignedCount;
+
+    // Search K from 1 up to eligibleVehicles.length for the minimum fleet size K*
+    let winningEval: ReturnType<typeof simulateSubsetAssignment> | null = null;
+
+    for (let k = 1; k <= eligibleVehicles.length; k++) {
+      // Evaluate combinations of size k (or top k vehicles if fleet is large)
+      const candidateSubsets: Vehicle[][] =
+        eligibleVehicles.length <= 6
+          ? getSubsets(eligibleVehicles, k)
+          : [eligibleVehicles.slice(0, k)];
+
+      let bestKSubEval: ReturnType<typeof simulateSubsetAssignment> | null = null;
+
+      for (const subset of candidateSubsets) {
+        const evalResult = simulateSubsetAssignment(subset);
+        if (evalResult.assignedCount === maxAssignableCount) {
+          if (!bestKSubEval || evalResult.totalDist < bestKSubEval.totalDist - 0.001) {
+            bestKSubEval = evalResult;
+          }
+        }
+      }
+
+      if (bestKSubEval) {
+        // Found minimum K that accommodates maxAssignableCount orders!
+        winningEval = bestKSubEval;
+        break;
+      }
+    }
+
+    if (!winningEval) {
+      winningEval = fullFleetEval;
+    }
+
+    // Populate the master buckets with winning assignment
+    const winningMap = new Map<string, (typeof winningEval.subBuckets)[0]>();
+    for (const b of winningEval.subBuckets) {
+      winningMap.set(b.vehicle.id, b);
+    }
+
+    buckets = eligibleVehicles.map((v) => {
+      const match = winningMap.get(v.id);
+      if (match) {
+        return {
+          vehicle: v,
+          assignedOrders: match.assignedOrders,
+          currentLoadKg: match.currentLoadKg,
+          maxCapacityKg: match.maxCapacityKg,
+          maxStops: match.maxStops,
+        };
+      }
+      return {
+        vehicle: v,
+        assignedOrders: [],
+        currentLoadKg: 0,
+        maxCapacityKg: v.capacityKg || 500,
+        maxStops: v.maxStops || 15,
+      };
+    });
+
+    for (const ord of winningEval.unassignedOrders) {
+      unassigned.push({
+        order: ord,
+        reason: 'Fleet capacity exhausted',
+        detail: `All vehicles in the optimized fleet reached capacity or max stops limit (${ord.weightKg || ord.packageWeightKg || 0} kg could not be accommodated).`,
+      });
+    }
+  } else {
+    // -------------------------------------------------------------
+    // STANDARD HEURISTIC ASSIGNMENT (Distance or Time objective)
+    // -------------------------------------------------------------
+    for (const order of eligibleOrders) {
+      const orderWeight = order.weightKg || order.packageWeightKg || 0;
+
+      // Check if order exceeds every vehicle's total capacity
+      const canFitAnywhere = buckets.some((b) => b.maxCapacityKg >= orderWeight);
+      if (!canFitAnywhere) {
+        unassigned.push({
+          order,
+          reason: 'Order exceeds available vehicle capacity',
+          detail: `Package weight (${orderWeight} kg) exceeds maximum capacity of any available vehicle (Max: ${Math.max(
+            ...buckets.map((b) => b.maxCapacityKg)
+          )} kg).`,
+        });
         continue;
       }
 
-      // Proximity evaluation: distance from last assigned stop or depot
-      const lastPoint =
-        bucket.assignedOrders.length > 0
-          ? getOrderCoordinates(bucket.assignedOrders[bucket.assignedOrders.length - 1])
-          : depotPoint;
+      let bestBucket: VehicleBucket | null = null;
+      let bestCost = Number.MAX_VALUE;
+      let bestSecondary = Number.MAX_VALUE;
 
-      const orderPoint = getOrderCoordinates(order);
-      const legEval = evaluateCandidateLegCost(lastPoint, orderPoint, settings, true);
+      for (const bucket of buckets) {
+        const willExceedWeight = bucket.currentLoadKg + orderWeight > bucket.maxCapacityKg;
+        const willExceedStops = bucket.assignedOrders.length + 1 > bucket.maxStops;
 
-      if (settings.objective === 'distance') {
-        const addedDist = legEval.distanceKm;
-        const affinityBonusKm = order.assignedVehicleId === bucket.vehicle.id ? -15 : 0;
-        const effectiveDist = addedDist + affinityBonusKm;
+        if (willExceedWeight || willExceedStops) {
+          continue;
+        }
 
-        let isBetter = false;
-        if (effectiveDist < bestCost - 0.001) {
-          isBetter = true;
-        } else if (Math.abs(effectiveDist - bestCost) <= 0.001) {
-          // Tie-breaker: vehicle with lower current load percentage, then vehicle id
-          const loadRatio = bucket.currentLoadKg / bucket.maxCapacityKg;
-          if (loadRatio < bestSecondary - 0.001) {
+        const lastPoint =
+          bucket.assignedOrders.length > 0
+            ? getOrderCoordinates(bucket.assignedOrders[bucket.assignedOrders.length - 1])
+            : depotPoint;
+
+        const orderPoint = getOrderCoordinates(order);
+        const legEval = evaluateCandidateLegCost(lastPoint, orderPoint, settings, true);
+
+        if (settings.objective === 'distance') {
+          const addedDist = legEval.distanceKm;
+          const affinityBonusKm = order.assignedVehicleId === bucket.vehicle.id ? -15 : 0;
+          const effectiveDist = addedDist + affinityBonusKm;
+
+          let isBetter = false;
+          if (effectiveDist < bestCost - 0.001) {
             isBetter = true;
-          } else if (
-            Math.abs(loadRatio - bestSecondary) <= 0.001 &&
-            bestBucket &&
-            bucket.vehicle.id.localeCompare(bestBucket.vehicle.id) < 0
-          ) {
-            isBetter = true;
+          } else if (Math.abs(effectiveDist - bestCost) <= 0.001) {
+            const loadRatio = bucket.currentLoadKg / bucket.maxCapacityKg;
+            if (loadRatio < bestSecondary - 0.001) {
+              isBetter = true;
+            } else if (
+              Math.abs(loadRatio - bestSecondary) <= 0.001 &&
+              bestBucket &&
+              bucket.vehicle.id.localeCompare(bestBucket.vehicle.id) < 0
+            ) {
+              isBetter = true;
+            }
           }
-        }
 
-        if (isBetter) {
-          bestCost = effectiveDist;
-          bestSecondary = bucket.currentLoadKg / bucket.maxCapacityKg;
-          bestBucket = bucket;
-        }
-      } else {
-        // Time objective: incremental transit duration + service dwell time in minutes
-        const addedTimeMin = legEval.objectiveCost;
-        const affinityBonusMin =
-          order.assignedVehicleId === bucket.vehicle.id
-            ? -calculateTravelTimeMinutes(15, settings.averageSpeedKmH)
-            : 0;
-        const effectiveTime = addedTimeMin + affinityBonusMin;
-
-        // Cumulative active vehicle time so far (to balance vehicle utilization / makespan)
-        const currentBucketDuration = bucket.assignedOrders.length * settings.serviceTimeMinutes;
-
-        let isBetter = false;
-        if (effectiveTime < bestCost) {
-          isBetter = true;
-        } else if (effectiveTime === bestCost) {
-          // Defensible tie-breaker for time: balance vehicle workload (prefer vehicle with less current active time)
-          if (currentBucketDuration < bestSecondary) {
-            isBetter = true;
-          } else if (
-            currentBucketDuration === bestSecondary &&
-            bestBucket &&
-            bucket.vehicle.id.localeCompare(bestBucket.vehicle.id) < 0
-          ) {
-            isBetter = true;
+          if (isBetter) {
+            bestCost = effectiveDist;
+            bestSecondary = bucket.currentLoadKg / bucket.maxCapacityKg;
+            bestBucket = bucket;
           }
-        }
+        } else {
+          // Time objective: incremental transit duration + service dwell time in minutes
+          const addedTimeMin = legEval.objectiveCost;
+          const affinityBonusMin =
+            order.assignedVehicleId === bucket.vehicle.id
+              ? -calculateTravelTimeMinutes(15, settings.averageSpeedKmH)
+              : 0;
+          const effectiveTime = addedTimeMin + affinityBonusMin;
+          const currentBucketDuration = bucket.assignedOrders.length * settings.serviceTimeMinutes;
 
-        if (isBetter) {
-          bestCost = effectiveTime;
-          bestSecondary = currentBucketDuration;
-          bestBucket = bucket;
+          let isBetter = false;
+          if (effectiveTime < bestCost) {
+            isBetter = true;
+          } else if (effectiveTime === bestCost) {
+            if (currentBucketDuration < bestSecondary) {
+              isBetter = true;
+            } else if (
+              currentBucketDuration === bestSecondary &&
+              bestBucket &&
+              bucket.vehicle.id.localeCompare(bestBucket.vehicle.id) < 0
+            ) {
+              isBetter = true;
+            }
+          }
+
+          if (isBetter) {
+            bestCost = effectiveTime;
+            bestSecondary = currentBucketDuration;
+            bestBucket = bucket;
+          }
         }
       }
-    }
 
-    if (bestBucket) {
-      bestBucket.assignedOrders.push(order);
-      bestBucket.currentLoadKg = Number((bestBucket.currentLoadKg + orderWeight).toFixed(1));
-    } else {
-      unassigned.push({
-        order,
-        reason: 'Fleet capacity exhausted',
-        detail: `All compatible vehicles have reached capacity or max stops limit (${orderWeight} kg could not be accommodated).`,
-      });
+      if (bestBucket) {
+        bestBucket.assignedOrders.push(order);
+        bestBucket.currentLoadKg = Number((bestBucket.currentLoadKg + orderWeight).toFixed(1));
+      } else {
+        unassigned.push({
+          order,
+          reason: 'Fleet capacity exhausted',
+          detail: `All compatible vehicles have reached capacity or max stops limit (${orderWeight} kg could not be accommodated).`,
+        });
+      }
     }
   }
 
@@ -730,6 +922,22 @@ export function optimizeRoutes(
   );
   const vehiclesUsedCount = vehicleRoutePlans.filter((r) => r.stops.length > 0).length;
 
+  const timeWindowsMetCount = vehicleRoutePlans.reduce(
+    (sum, r) => sum + r.stops.filter((s) => s.isWithinWindow).length,
+    0
+  );
+  const timeWindowsMissedCount = vehicleRoutePlans.reduce(
+    (sum, r) => sum + r.stops.filter((s) => s.isDeadlineMissed).length,
+    0
+  );
+
+  const algorithmName =
+    settings.objective === 'lexicographic'
+      ? 'Lexicographic Priority (Min. Fleet Size → Min. Total Distance)'
+      : settings.objective === 'time'
+      ? 'Deterministic Heuristic (Min. Travel Time)'
+      : 'Deterministic Heuristic (Min. Distance)';
+
   return {
     id: `OPT-${Date.now()}`,
     optimizedAt: new Date().toISOString(),
@@ -746,7 +954,9 @@ export function optimizeRoutes(
     vehiclesUsedCount,
     totalFleetLoadKg,
     isFeasible: feasibilityCheck.isFeasible,
-    algorithmName: `Deterministic Nearest-Neighbor + 2-Opt (${settings.objective === 'time' ? 'Min. Travel Time' : 'Min. Distance'} Heuristic)`,
+    algorithmName,
     modelLimitationsNote: SYNTHETIC_MODEL_DISCLOSURE,
+    timeWindowsMetCount,
+    timeWindowsMissedCount,
   };
 }

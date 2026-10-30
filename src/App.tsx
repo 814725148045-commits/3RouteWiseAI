@@ -49,8 +49,8 @@ import { DeliveryOrder, NavigationPage, OrderStatus, Vehicle, VehicleStatus } fr
 import { CheckCircle2, Info, AlertCircle, X } from 'lucide-react';
 
 export default function App() {
-  // Navigation
-  const [currentPage, setCurrentPage] = useState<NavigationPage>('dashboard');
+  // Navigation: Route Optimization is the primary feature of the system
+  const [currentPage, setCurrentPage] = useState<NavigationPage>('planner');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -756,25 +756,23 @@ export default function App() {
 
         {/* Dynamic Content View */}
         <main className="flex-1 p-4 lg:p-8">
-          {/* Module 1: Dashboard View */}
+          {/* Section A: Delivery Dashboard */}
           {currentPage === 'dashboard' && (
             <div className="max-w-7xl mx-auto space-y-6">
-              {/* 1. KPI Cards */}
+              {/* 1. Essential KPI Cards */}
               <KpiCards
-                totalDeliveries={totalDeliveriesMetric}
-                activeVehiclesCount={activeVehiclesCount}
+                totalDeliveries={orders.length}
+                availableFleetSize={vehicles.filter((v) => v.status === 'Available').length}
+                vehiclesUsedCount={optimizationResult?.vehiclesUsedCount ?? 0}
+                totalDistanceKm={optimizationResult?.totalDistanceKm ?? 0}
+                deliveriesMeetingWindows={optimizationResult?.timeWindowsMetCount ?? 0}
+                lateOrInfeasibleDeliveries={
+                  (optimizationResult?.timeWindowsMissedCount ?? 0) +
+                  (optimizationResult?.totalUnassignedOrders ?? 0)
+                }
               />
 
-              {/* 1.5. Gemini AI Insights Summary Card (Module 5) */}
-              <AiInsightsSummaryCard
-                report={insightsReport}
-                isStale={isInsightsStale}
-                onNavigateToInsights={() => setCurrentPage('insights')}
-                onRefreshInsights={handleQuickRefreshInsights}
-                isLoading={isRefreshingInsights}
-              />
-
-              {/* 2. Responsive Two-Column Layout (Route Overview + Fleet Status) */}
+              {/* 2. Responsive Two-Column Layout (Route Overview Map + Fleet Status) */}
               <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 {/* Column A: Route Overview Map (7 cols on desktop) */}
                 <div className="lg:col-span-7 xl:col-span-8">
@@ -808,7 +806,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Module 2: Orders Management View */}
+          {/* Section B: Customer Deliveries */}
           {currentPage === 'orders' && (
             <OrdersView
               orders={orders}
@@ -823,7 +821,7 @@ export default function App() {
             />
           )}
 
-          {/* Module 3: Fleet Management View */}
+          {/* Section C: Fleet Management */}
           {currentPage === 'fleet' && (
             <FleetView
               vehicles={vehicles}
@@ -837,7 +835,7 @@ export default function App() {
             />
           )}
 
-          {/* Module 4: Route Optimization Engine View */}
+          {/* Section D: Route Optimization (Main Feature) */}
           {currentPage === 'planner' && (
             <RoutePlannerView
               orders={orders}
@@ -846,62 +844,19 @@ export default function App() {
               onResetData={handleRequestResetDemoData}
             />
           )}
-
-          {/* Module 5: RouteWise AI Insights View */}
-          {currentPage === 'insights' && (
-            <AiInsightsView
-              orders={orders}
-              vehicles={vehicles}
-              optimizationResult={optimizationResult}
-              report={insightsReport}
-              isStale={isInsightsStale}
-              onUpdateReport={setInsightsReport}
-              onNavigateToPlanner={() => setCurrentPage('planner')}
-            />
-          )}
-
-          {/* Module 6: Route Rescue — Delivery Disruption Recovery */}
-          {currentPage === 'rescue' && (
-            <RouteRescueView
-              orders={orders}
-              vehicles={vehicles}
-              optimizationResult={optimizationResult}
-              incidents={incidents}
-              recoveryPlans={recoveryPlans}
-              onAddIncident={handleAddIncident}
-              onAddUrgentOrder={handleAddUrgentOrder}
-              onSaveRecoveryPlan={handleSaveRecoveryPlan}
-              onApplyPlan={handleApplyRecoveryPlan}
-              onRejectPlan={handleRejectRecoveryPlan}
-              onLoadDemoScenario={handleLoadDemoScenario}
-            />
-          )}
-
-          {/* Subsequent Modules: Interactive Roadmap Placeholders */}
-          {currentPage !== 'dashboard' &&
-            currentPage !== 'orders' &&
-            currentPage !== 'fleet' &&
-            currentPage !== 'planner' &&
-            currentPage !== 'insights' &&
-            currentPage !== 'rescue' && (
-              <ModulePlaceholder
-                page={currentPage}
-                onReturnToDashboard={() => setCurrentPage('dashboard')}
-              />
-            )}
         </main>
 
         {/* Global Minimal Footer */}
         <footer className="border-t border-slate-800/80 px-4 lg:px-8 py-3.5 bg-[#0b1329]/80 text-xs text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-300">RouteWise AI</span>
+            <span className="font-semibold text-slate-300">RouteWise Fleet</span>
             <span aria-hidden="true">·</span>
-            <span>Modules 1–6 Active (Dashboard, Orders, Fleet, Planner, AI Insights &amp; Route Rescue)</span>
+            <span>DT-LSC-10: Small Delivery Fleet Under Time Windows</span>
           </div>
           <div className="flex items-center gap-2 text-[11px] font-mono">
-            <span>LocalStorage Synchronized</span>
+            <span>Lexicographic Optimization Engine</span>
             <span aria-hidden="true">·</span>
-            <span className="text-teal-400">Hackathon Prototype</span>
+            <span className="text-teal-400">Deterministic Heuristic</span>
           </div>
         </footer>
       </div>

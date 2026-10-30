@@ -447,12 +447,12 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
               <tr className="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-medium">
                 <th className="py-3 px-4 whitespace-nowrap">Order ID</th>
                 <th className="py-3 px-4 min-w-[180px]">Customer</th>
-                <th className="py-3 px-4 min-w-[220px]">Delivery Destination</th>
+                <th className="py-3 px-4 min-w-[200px]">Destination</th>
+                <th className="py-3 px-4 whitespace-nowrap">Time Window [Earliest–Latest]</th>
+                <th className="py-3 px-4 whitespace-nowrap">Service Dwell</th>
                 <th className="py-3 px-4 whitespace-nowrap">Weight</th>
-                <th className="py-3 px-4 whitespace-nowrap">Priority</th>
-                <th className="py-3 px-4 whitespace-nowrap">Deadline</th>
                 <th className="py-3 px-4 whitespace-nowrap">Status</th>
-                <th className="py-3 px-4 whitespace-nowrap">Assigned Vehicle</th>
+                <th className="py-3 px-4 whitespace-nowrap">Vehicle</th>
                 <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
@@ -498,22 +498,22 @@ export const OrdersView: React.FC<OrdersViewProps> = ({
                         </div>
                       </td>
 
+                      {/* Delivery Time Window [Earliest - Latest] */}
+                      <td className="py-3.5 px-4 font-mono whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-teal-300 text-[11px]">
+                          <Clock className="w-3 h-3 text-slate-400" />
+                          <span>{order.timeWindowEarliest || '08:30 AM'} – {order.timeWindowLatest || order.deliveryDeadline}</span>
+                        </span>
+                      </td>
+
+                      {/* Service Dwell Time */}
+                      <td className="py-3.5 px-4 font-mono text-slate-300 whitespace-nowrap">
+                        {order.serviceTimeMinutes || 10} min
+                      </td>
+
                       {/* Weight */}
                       <td className="py-3.5 px-4 font-mono tabular-nums text-slate-200 whitespace-nowrap">
                         {order.weightKg.toFixed(1)} kg
-                      </td>
-
-                      {/* Priority */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {getPriorityBadge(order.priority)}
-                      </td>
-
-                      {/* Deadline */}
-                      <td className="py-3.5 px-4 font-mono tabular-nums text-slate-200 whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          <span>{order.deliveryDeadline}</span>
-                        </div>
                       </td>
 
                       {/* Status */}

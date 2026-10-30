@@ -174,21 +174,14 @@ export const VehicleRouteCard: React.FC<VehicleRouteCardProps> = ({
                   <th className="py-2.5 px-4 font-semibold">Order</th>
                   <th className="py-2.5 px-4 font-semibold">Destination</th>
                   <th className="py-2.5 px-4 font-semibold">Weight</th>
-                  <th className="py-2.5 px-4 font-semibold">Priority</th>
-                  <th className="py-2.5 px-4 font-semibold">Deadline</th>
+                  <th className="py-2.5 px-4 font-semibold">Time Window [Earliest–Latest]</th>
                   <th className="py-2.5 px-4 font-semibold">Est. Arrival (ETA)</th>
+                  <th className="py-2.5 px-4 font-semibold">Service Dwell</th>
                   <th className="py-2.5 px-4 font-semibold">Leg Distance</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-sans">
                 {stops.map((stop) => {
-                  const priorityColors = {
-                    urgent: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
-                    high: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
-                    normal: 'bg-teal-500/10 text-teal-300 border-teal-500/30',
-                    low: 'bg-slate-800 text-slate-300 border-slate-700',
-                  }[stop.order.priority];
-
                   return (
                     <tr
                       key={stop.order.id}
@@ -210,7 +203,7 @@ export const VehicleRouteCard: React.FC<VehicleRouteCardProps> = ({
                       </td>
 
                       {/* Destination */}
-                      <td className="py-2.5 px-4 max-w-48 truncate text-slate-300" title={stop.order.destination}>
+                      <td className="py-2.5 px-4 max-w-44 truncate text-slate-300" title={stop.order.destination}>
                         {stop.order.destination}
                       </td>
 
@@ -219,36 +212,46 @@ export const VehicleRouteCard: React.FC<VehicleRouteCardProps> = ({
                         {stop.order.weightKg} kg
                       </td>
 
-                      {/* Priority */}
-                      <td className="py-2.5 px-4">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-medium border uppercase tracking-wider ${priorityColors}`}
-                        >
-                          {stop.order.priority}
+                      {/* Time Window */}
+                      <td className="py-2.5 px-4 font-mono text-[11px] text-slate-300">
+                        <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-teal-300">
+                          {stop.timeWindowEarliest || '08:30 AM'} – {stop.timeWindowLatest || stop.deadlineString}
                         </span>
                       </td>
 
-                      {/* Deadline */}
-                      <td className="py-2.5 px-4 font-mono text-slate-400">
-                        {stop.deadlineString}
-                      </td>
-
-                      {/* Estimated Arrival (ETA) with Warning */}
+                      {/* Estimated Arrival (ETA) with Window Status */}
                       <td className="py-2.5 px-4">
                         <div className="flex items-center gap-1.5">
                           <span
                             className={`font-mono font-semibold ${
-                              stop.isDeadlineMissed ? 'text-rose-400' : 'text-emerald-400'
+                              stop.isDeadlineMissed
+                                ? 'text-rose-400'
+                                : stop.isEarly
+                                ? 'text-amber-400'
+                                : 'text-emerald-400'
                             }`}
                           >
                             {stop.estimatedArrival}
                           </span>
-                          {stop.isDeadlineMissed && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                              +{stop.deadlineDiscrepancyMinutes}m
+                          {stop.isDeadlineMissed ? (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30" title="Violates latest delivery time window">
+                              Late (+{stop.deadlineDiscrepancyMinutes}m)
+                            </span>
+                          ) : stop.isEarly ? (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30" title="Arrives before window opens (dwells until start)">
+                              Wait {stop.windowViolationMinutes}m
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              On-Time
                             </span>
                           )}
                         </div>
+                      </td>
+
+                      {/* Service Dwell */}
+                      <td className="py-2.5 px-4 font-mono text-xs text-slate-300">
+                        {stop.serviceTimeMinutes || 10} min
                       </td>
 
                       {/* Leg Distance */}

@@ -15,7 +15,7 @@ import {
 } from '../../services/routing/types';
 import { exportRoutePlanAsJson } from '../../services/routing/exportPlan';
 import { SchematicRouteVisualizer } from './SchematicRouteVisualizer';
-import { DispatcherBriefingCard } from './DispatcherBriefingCard';
+import { AssumptionsAndLimitationsCard } from './AssumptionsAndLimitationsCard';
 import { PlanComparisonPanel } from './PlanComparisonPanel';
 import { OptimizationSettingsDrawer } from './OptimizationSettingsDrawer';
 import { VehicleRouteCard } from './VehicleRouteCard';
@@ -162,10 +162,10 @@ export const RoutePlannerView: React.FC<RoutePlannerViewProps> = ({
           <button
             onClick={() => setIsTestModalOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-700 transition-all cursor-pointer"
-            title="Run 17 Automated Verification Tests"
+            title="Run 20 Automated Verification Tests"
           >
             <Terminal className="w-3.5 h-3.5 text-teal-400" />
-            <span>Verify Suite (17)</span>
+            <span>Verify Suite (20)</span>
           </button>
 
           {/* Export Route Plan */}
@@ -222,8 +222,8 @@ export const RoutePlannerView: React.FC<RoutePlannerViewProps> = ({
           <span>•</span>
           <span className="text-slate-400">
             Algorithm:{' '}
-            <strong className="text-slate-300 font-normal">
-              Deterministic Nearest-Neighbor + 2-Opt (Heuristic)
+            <strong className="text-teal-300 font-medium">
+              {optimizationResult?.algorithmName || 'Lexicographic Priority (Min. Fleet Size → Min. Total Distance)'}
             </strong>
           </span>
         </div>
@@ -263,12 +263,12 @@ export const RoutePlannerView: React.FC<RoutePlannerViewProps> = ({
         </div>
       )}
 
-      {/* Top Summary Metric Cards */}
+      {/* Top Summary Metric Cards: Essential Problem Statement KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {/* Metric 1: Assigned Orders */}
+        {/* Metric 1: Total Customer Deliveries */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-sm">
           <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">
-            Assigned Orders
+            Customer Deliveries
           </span>
           <div className="mt-1 flex items-baseline gap-1.5">
             <span className="text-2xl font-bold text-slate-100">
@@ -279,38 +279,34 @@ export const RoutePlannerView: React.FC<RoutePlannerViewProps> = ({
           <span className="text-[10px] text-emerald-400 font-medium mt-0.5 block">
             {optimizationResult?.totalUnassignedOrders === 0
               ? '100% orders routed'
-              : `${optimizationResult?.totalUnassignedOrders} in pending queue`}
+              : `${optimizationResult?.totalUnassignedOrders} pending unassigned`}
           </span>
         </div>
 
-        {/* Metric 2: Unassigned Orders */}
+        {/* Metric 2: Vehicles Utilized (1st Priority) */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-sm">
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400">
-            Unassigned Orders
+          <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1">
+            <Truck className="w-3 h-3 text-teal-400" />
+            Vehicles Used (Priority 1)
           </span>
           <div className="mt-1 flex items-baseline gap-1.5">
-            <span
-              className={`text-2xl font-bold ${
-                (optimizationResult?.totalUnassignedOrders ?? 0) > 0
-                  ? 'text-amber-400'
-                  : 'text-slate-100'
-              }`}
-            >
-              {optimizationResult?.totalUnassignedOrders ?? 0}
+            <span className="text-2xl font-bold text-teal-300">
+              {optimizationResult?.vehiclesUsedCount ?? 0}
+            </span>
+            <span className="text-xs text-slate-400">
+              / {vehicles.filter((v) => v.status === 'Available').length} available
             </span>
           </div>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
-            {(optimizationResult?.totalUnassignedOrders ?? 0) > 0
-              ? 'Constraint limits reached'
-              : 'Zero unassigned'}
+            Minimizes fleet size first
           </span>
         </div>
 
-        {/* Metric 3: Total Estimated Distance */}
+        {/* Metric 3: Total Distance (2nd Priority) */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-sm">
           <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1">
             <Navigation className="w-3 h-3 text-cyan-400" />
-            Est. Total Distance
+            Distance (Priority 2)
           </span>
           <div className="mt-1 flex items-baseline gap-1.5">
             <span className="text-2xl font-bold text-cyan-300">
@@ -319,43 +315,48 @@ export const RoutePlannerView: React.FC<RoutePlannerViewProps> = ({
             <span className="text-xs text-slate-400">km</span>
           </div>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
-            All vehicle return loops
+            Minimizes distance among K* units
           </span>
         </div>
 
-        {/* Metric 4: Total Estimated Travel Time */}
+        {/* Metric 4: Deliveries Meeting Time Windows */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-sm">
           <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1">
-            <Clock className="w-3 h-3 text-teal-400" />
-            Est. Total Duration
+            <Clock className="w-3 h-3 text-emerald-400" />
+            Time Windows Met
           </span>
           <div className="mt-1 flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold text-teal-300">
-              {Math.floor((optimizationResult?.totalDurationMinutes ?? 0) / 60)}h{' '}
-              {(optimizationResult?.totalDurationMinutes ?? 0) % 60}m
+            <span className="text-2xl font-bold text-emerald-300">
+              {optimizationResult?.timeWindowsMetCount ?? 0}
+            </span>
+            <span className="text-xs text-slate-400">
+              / {optimizationResult?.totalAssignedOrders ?? 0}
             </span>
           </div>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
-            Travel + stop service time
+            Arrivals within [Earliest, Latest]
           </span>
         </div>
 
-        {/* Metric 5: Vehicles Used */}
+        {/* Metric 5: Late or Infeasible Deliveries */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-sm col-span-2 md:col-span-1">
           <span className="text-[11px] uppercase tracking-wider font-semibold text-slate-400 flex items-center gap-1">
-            <Truck className="w-3 h-3 text-slate-400" />
-            Vehicles Utilized
+            <AlertTriangle className="w-3 h-3 text-amber-400" />
+            Late / Infeasible
           </span>
           <div className="mt-1 flex items-baseline gap-1.5">
-            <span className="text-2xl font-bold text-slate-100">
-              {optimizationResult?.vehiclesUsedCount ?? 0}
-            </span>
-            <span className="text-xs text-slate-400">
-              / {vehicles.filter((v) => v.status !== 'Maintenance' && v.status !== 'Offline').length}
+            <span
+              className={`text-2xl font-bold ${
+                ((optimizationResult?.timeWindowsMissedCount ?? 0) + (optimizationResult?.totalUnassignedOrders ?? 0)) > 0
+                  ? 'text-amber-400'
+                  : 'text-slate-100'
+              }`}
+            >
+              {(optimizationResult?.timeWindowsMissedCount ?? 0) + (optimizationResult?.totalUnassignedOrders ?? 0)}
             </span>
           </div>
           <span className="text-[10px] text-slate-400 mt-0.5 block">
-            Active operational units
+            {optimizationResult?.timeWindowsMissedCount ?? 0} late, {optimizationResult?.totalUnassignedOrders ?? 0} unassigned
           </span>
         </div>
       </div>
@@ -416,10 +417,8 @@ export const RoutePlannerView: React.FC<RoutePlannerViewProps> = ({
             }
           />
 
-          {/* Dispatcher AI Briefing Card */}
-          {optimizationResult?.geminiInsight && (
-            <DispatcherBriefingCard insight={optimizationResult.geminiInsight} />
-          )}
+          {/* Model Assumptions & Limitations (Requirement G) */}
+          <AssumptionsAndLimitationsCard />
         </div>
       </div>
 

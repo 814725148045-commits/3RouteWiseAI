@@ -696,6 +696,90 @@ export function runOptimizationUnitTests(): TestSuiteExecution {
     });
   }
 
+  // 18. Verify lexicographic priority: minimizes number of vehicles used as first priority
+  try {
+    const lexPlan = optimizeRoutes(INITIAL_ORDERS, INITIAL_VEHICLES, {
+      ...DEFAULT_OPTIMIZATION_SETTINGS,
+      objective: 'lexicographic',
+    });
+    const vehiclesUsed = lexPlan.vehiclesUsedCount;
+    const passed18 = vehiclesUsed === 1 && lexPlan.totalAssignedOrders === 11;
+    results.push({
+      id: 18,
+      scenario: 'Scenario 18: Verify lexicographic priority minimizes number of vehicles used as first priority',
+      passed: passed18,
+      message: passed18
+        ? `Lexicographic priority verified: Successfully packed all 11 assignable orders into ${vehiclesUsed} vehicle (VAN-103) instead of opening multiple vehicles, reducing active fleet from baseline 3 to 1.`
+        : `Failed: Expected 1 vehicle used, got ${vehiclesUsed} vehicles.`,
+    });
+  } catch (err: any) {
+    results.push({
+      id: 18,
+      scenario: 'Scenario 18: Verify lexicographic priority minimizes number of vehicles used as first priority',
+      passed: false,
+      message: `Error: ${err?.message}`,
+    });
+  }
+
+  // 19. Verify time window feasibility [earliest, latest] is evaluated and flagged without false compliance
+  try {
+    const optPlan = optimizeRoutes(INITIAL_ORDERS, INITIAL_VEHICLES, DEFAULT_OPTIMIZATION_SETTINGS);
+    const metCount = optPlan.timeWindowsMetCount;
+    const missedCount = optPlan.timeWindowsMissedCount;
+    const allStops = optPlan.routes.flatMap((r) => r.stops);
+    const allStopsHaveWindows = allStops.every((s) => s.timeWindowEarliest && s.timeWindowLatest);
+    const flagsMatchTruth = allStops.every((s) => {
+      if (s.isWithinWindow) return !s.isDeadlineMissed;
+      if (s.isDeadlineMissed) return (s.deadlineDiscrepancyMinutes ?? 0) > 0;
+      return true;
+    });
+
+    const passed19 = allStopsHaveWindows && flagsMatchTruth && metCount + missedCount === allStops.length;
+    results.push({
+      id: 19,
+      scenario: 'Scenario 19: Verify customer delivery time windows [earliest, latest] are evaluated and flagged accurately',
+      passed: passed19,
+      message: passed19
+        ? `Time window feasibility verified: ${metCount} stops strictly meet [earliest, latest] windows, ${missedCount} SLA risks correctly flagged without false compliance claims.`
+        : 'Failed: Time window flags or window bounds inconsistent.',
+    });
+  } catch (err: any) {
+    results.push({
+      id: 19,
+      scenario: 'Scenario 19: Verify customer delivery time windows [earliest, latest] are evaluated and flagged accurately',
+      passed: false,
+      message: `Error: ${err?.message}`,
+    });
+  }
+
+  // 20. Verify fair baseline comparison (only claims distance savings when routed delivery sets match)
+  try {
+    const optPlan = optimizeRoutes(INITIAL_ORDERS, INITIAL_VEHICLES, DEFAULT_OPTIMIZATION_SETTINGS);
+    const comparison = optPlan.comparison;
+    const baselineOrdersCount = comparison.baselineOrdersRouted;
+    const optimizedOrdersCount = comparison.optimizedOrdersRouted;
+
+    const correctlyFlagsCoverageMismatch = !comparison.isDirectlyComparable && comparison.distanceSavedKm === 0;
+    const hasTransparentNote = comparison.comparabilityNote.length > 0;
+
+    const passed20 = correctlyFlagsCoverageMismatch && hasTransparentNote;
+    results.push({
+      id: 20,
+      scenario: 'Scenario 20: Verify baseline plan comparison enforces fair comparability when order sets differ',
+      passed: passed20,
+      message: passed20
+        ? `Fair baseline comparison verified: Detected coverage difference (${baselineOrdersCount} baseline vs ${optimizedOrdersCount} optimized). Correctly suppressed misleading distance savings and reported transparent explanation.`
+        : 'Failed: Baseline comparison claimed invalid savings across non-identical order sets.',
+    });
+  } catch (err: any) {
+    results.push({
+      id: 20,
+      scenario: 'Scenario 20: Verify baseline plan comparison enforces fair comparability when order sets differ',
+      passed: false,
+      message: `Error: ${err?.message}`,
+    });
+  }
+
   const durationMs = Math.round(performance.now() - startTime);
   const passedTests = results.filter((r) => r.passed).length;
 

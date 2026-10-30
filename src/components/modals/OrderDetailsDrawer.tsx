@@ -226,14 +226,16 @@ export const OrderDetailsDrawer: React.FC<OrderDetailsDrawerProps> = ({
             </div>
 
             <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
-              <span className="text-[10px] text-slate-400 uppercase font-mono block">Delivery Deadline</span>
+              <span className="text-[10px] text-slate-400 uppercase font-mono block">Delivery Time Window</span>
               <div className="flex items-center gap-1.5 mt-1">
-                <Clock className="w-4 h-4 text-teal-400" />
-                <span className="text-sm font-mono font-bold text-white tabular-nums">
-                  {order.deliveryDeadline}
+                <Clock className="w-4 h-4 text-teal-400 shrink-0" />
+                <span className="text-xs font-mono font-bold text-white tabular-nums">
+                  {order.timeWindowEarliest || '08:30 AM'} – {order.timeWindowLatest || order.deliveryDeadline}
                 </span>
               </div>
-              <span className="text-[10px] text-slate-400">Target SLA window</span>
+              <span className="text-[10px] text-teal-400/90 mt-0.5 block">
+                Dwell Service: {order.serviceTimeMinutes || 10} min
+              </span>
             </div>
 
             <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">

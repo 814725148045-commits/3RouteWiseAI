@@ -20,6 +20,9 @@ export interface DeliveryOrder {
   priority: OrderPriority;
   status: OrderStatus;
   deliveryDeadline: string; // e.g. '14:30' or '02:30 PM'
+  timeWindowEarliest?: string; // Earliest allowed arrival (e.g. '09:00 AM')
+  timeWindowLatest?: string; // Latest allowed arrival (e.g. '11:15 AM')
+  serviceTimeMinutes?: number; // Estimated service dwell time at stop in minutes
   estimatedArrival: string; // Display arrival window
   createdAt: string; // ISO 8601 string
   assignedVehicleId?: string;
